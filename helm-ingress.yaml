@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mongo-express
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: 170-187-131-161.ip.linodeusercontent.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix  # ← Required in v1
+            backend:
+              service:  # ← Changed structure
+                name: mongo-express-service
+                port:
+                  number: 8081
