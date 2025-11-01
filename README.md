@@ -1,8 +1,20 @@
 # MongoDB ReplicaSet with Mongo Express on Linode Kubernetes Engine
 
-## Table of Contents
-- [Architecture Overview](#architecture-overview)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.34+-326CE5?style=flat&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-ReplicaSet-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Helm](https://img.shields.io/badge/Helm-3.16+-0F1689?style=flat&logo=helm&logoColor=white)](https://helm.sh/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A production-ready guide for deploying a highly available MongoDB ReplicaSet on Linode Kubernetes Engine (LKE) with Mongo Express web UI and NGINX Ingress Controller.
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
 - [Part 1: Setting Up Linode Kubernetes Cluster](#part-1-setting-up-linode-kubernetes-cluster)
 - [Part 2: Local Environment Setup](#part-2-local-environment-setup)
 - [Part 3: Deploy MongoDB ReplicaSet](#part-3-deploy-mongodb-replicaset)
@@ -11,19 +23,37 @@
 - [Part 6: Configure Ingress for External Access](#part-6-configure-ingress-for-external-access)
 - [Part 7: Access and Verify](#part-7-access-and-verify)
 - [Troubleshooting](#troubleshooting)
+- [Production Considerations](#production-considerations)
 - [Clean Up](#clean-up)
+- [Contributing](#contributing)
+- [License](#license)
 
-## Architecture Overview
+---
 
-![Architetcture](img/k8_architecture.png)
+## Overview
 
+This project provides a comprehensive guide for deploying a production-grade MongoDB ReplicaSet on Linode Kubernetes Engine. The deployment includes:
 
-**What will be  Deployed?:**
+- **High Availability**: 3-node MongoDB ReplicaSet with automatic failover
+- **Quorum Management**: MongoDB Arbiter for election consensus
+- **Web Interface**: Mongo Express for database administration
+- **External Access**: NGINX Ingress Controller with LoadBalancer
+- **Persistent Storage**: Linode Block Storage for data durability
+
+---
+
+## Architecture
+
+![Architecture Diagram](img/k8_architecture.png)
+
+**What will be Deployed?:**
 - 3-node MongoDB ReplicaSet with automatic failover
 - 1 MongoDB Arbiter for quorum
 - Mongo Express web UI for database administration
 - NGINX Ingress Controller for external access
 - Persistent storage using Linode Block Storage
+
+---
 
 ## Prerequisites
 
@@ -32,14 +62,45 @@
 - Git Bash (Windows), Terminal (macOS/Linux), or PowerShell
 - Basic understanding of Kubernetes concepts
 
-
 **Estimated Monthly Cost:**
 - 2x Dedicated 4GB nodes
 - 3x Block Storage (10GB each)
-- 1x NodeBalancer: 
+- 1x NodeBalancer
 - **Total: ~$72/month**
 
 *Note: You can use smaller instances for testing (Shared 2GB at $12/month for 3 nodes = $36 total)*
+
+---
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/Ajay263/lke-mongodb-replicaset
+cd lke-mongodb-replicaset
+
+# Add Helm repositories
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+# Deploy MongoDB
+helm install mongodb --values helm-mongodb.yaml bitnami/mongodb
+
+# Deploy Mongo Express
+kubectl apply -f mongo-express.yaml
+
+# Install NGINX Ingress
+helm install nginx-ingress ingress-nginx/ingress-nginx \
+  --set controller.publishService.enabled=true
+
+# Configure Ingress (update with your LoadBalancer IP)
+kubectl apply -f mongo-express-ingress.yaml
+```
+
+> **Note**: For detailed step-by-step instructions, continue reading below.
+
+---
 
 ## Part 1: Setting Up Linode Kubernetes Cluster
 
@@ -49,85 +110,85 @@
 2. You'll see the Linode Cloud Manager dashboard
 3. Familiarize yourself with the navigation menu on the left
 
-### Step 1.3: Create a Kubernetes Cluster
+### Step 1.2: Create a Kubernetes Cluster
 
-1. **Navigate to Kubernetes Section:**
-   - In the left sidebar, click **Kubernetes**
-   - Click the blue **Create Cluster** button
+#### 1. Navigate to Kubernetes Section:
+- In the left sidebar, click **Kubernetes**
+- Click the blue **Create Cluster** button
 
-2. **Configure Cluster Label and Region:**
-   - **Cluster Label**: `mongodb-cluster` (or any name you prefer)
-     - This is just a friendly name for identification
-   - **Region**: Select a region close to you
-     - Examples: `Frankfurt, DE (eu-central)`, `Newark, NJ (us-east)`, `Singapore, SG (ap-south)`
-     - **Tip**: Choose based on your location for lower latency
-   - **Kubernetes Version**: Select the latest stable version (e.g., 1.34) as of time of writting
-     - Use the default recommended version unless you have specific requirements
+#### 2. Configure Cluster Label and Region:
 
-3. **Add Node Pools:**
-   
-   **What are Node Pools?**
-   - Groups of worker nodes (virtual machines) that run your containers
-   - All nodes in a pool have the same specifications
-   
-   **Recommended Configuration for this project:**
-   
-   **Option A: Production Setup (Recommended)**
-   - Click **Add Node Pool**
-   - Under **Dedicated CPU**, select **Dedicated 4GB**
-     - 2 CPU cores
-     - 4GB RAM
-     - 80GB Storage
-   
-   - Set **Quantity**: `3`
-   - **Why 2 nodes?** 
-     - Distributes MongoDB pods across different physical machines
-     - Provides high availability
-     - Allows for zero-downtime updates
-     - This might not be the reccommended value but for our use case its fine
+| Setting | Value | Description |
+|---------|-------|-------------|
+| **Cluster Label** | `mongodb-cluster` | Or any name you prefer - just a friendly name for identification |
+| **Region** | Your choice | Select a region close to you (Examples: `Frankfurt, DE (eu-central)`, `Newark, NJ (us-east)`, `Singapore, SG (ap-south)`) |
+| **Kubernetes Version** | `1.34` (latest stable) | Use the default recommended version unless you have specific requirements |
 
+**Tip**: Choose region based on your location for lower latency
 
+#### 3. Add Node Pools:
 
-4. **Review Your Configuration:**
-   
-   You should see:
-   ```
-   Cluster Summary
-   ├── Cluster Label: mongodb-cluster
-   ├── Region: useast
-   ├── Version: 1.34.x
-   └── Node Pools:
-       └── Dedicated 4GB: 2 nodes ($72/month)
-   
-   Estimated Monthly Cost: $72/month
-   (includes NodeBalancer costs)
-   ```
+**What are Node Pools?**
+- Groups of worker nodes (virtual machines) that run your containers
+- All nodes in a pool have the same specifications
 
-5. **Create the Cluster:**
-   - Review the monthly cost estimate
-   - Click the blue **Create Cluster** button at the bottom
-   - You'll see a progress indicator
+**Recommended Configuration for this project:**
 
-6. **Wait for Provisioning:**
-   - **Status will show**: "Provisioning"
-   - This takes approximately **5-10 minutes**
-   - You'll see each node being created:
-     - `lke123456-123456-abcdef123456` - Provisioning → Running
-     - `lke123456-123456-abcdef789012` - Provisioning → Running
-     - `lke123456-123456-abcdef345678` - Provisioning → Running
-   
-   **What's happening behind the scenes:**
-   - Linode is creating 3 virtual machines
-   - Installing Kubernetes on each node
-   - Configuring networking between nodes
-   - Setting up the cluster control plane
-   - Installing the Container Storage Interface (CSI) for block storage
+**Option A: Production Setup (Recommended)**
+- Click **Add Node Pool**
+- Under **Dedicated CPU**, select **Dedicated 4GB**
+  - 2 CPU cores
+  - 4GB RAM
+  - 80GB Storage
+- Set **Quantity**: `3`
 
-7. **Verify Cluster is Ready:**
-   - Wait until **Status** changes to "Ready"
-   - All 3 nodes should show **Status: Ready**
+**Why 2 nodes?**
+- Distributes MongoDB pods across different physical machines
+- Provides high availability
+- Allows for zero-downtime updates
+- This might not be the recommended value but for our use case its fine
 
-### Step 1.4: Download Kubeconfig File
+#### 4. Review Your Configuration:
+
+You should see:
+```
+Cluster Summary
+├── Cluster Label: mongodb-cluster
+├── Region: useast
+├── Version: 1.34.x
+└── Node Pools:
+    └── Dedicated 4GB: 2 nodes ($72/month)
+
+Estimated Monthly Cost: $72/month
+(includes NodeBalancer costs)
+```
+
+#### 5. Create the Cluster:
+- Review the monthly cost estimate
+- Click the blue **Create Cluster** button at the bottom
+- You'll see a progress indicator
+
+#### 6. Wait for Provisioning:
+
+- **Status will show**: "Provisioning"
+- This takes approximately **5-10 minutes**
+- You'll see each node being created:
+  - `lke123456-123456-abcdef123456` - Provisioning → Running
+  - `lke123456-123456-abcdef789012` - Provisioning → Running
+  - `lke123456-123456-abcdef345678` - Provisioning → Running
+
+**What's happening behind the scenes:**
+- Linode is creating 3 virtual machines
+- Installing Kubernetes on each node
+- Configuring networking between nodes
+- Setting up the cluster control plane
+- Installing the Container Storage Interface (CSI) for block storage
+
+#### 7. Verify Cluster is Ready:
+- Wait until **Status** changes to "Ready"
+- All 3 nodes should show **Status: Ready**
+
+### Step 1.3: Download Kubeconfig File
 
 **What is a kubeconfig file?**
 - Configuration file that contains:
@@ -159,7 +220,6 @@
    - **Keep it secure** - don't share it or commit to Git
    - Anyone with this file has full access to your cluster
 
-
 **Screenshot reference locations:**
 ```
 Cloud Manager
@@ -172,6 +232,8 @@ Cloud Manager
 │       └── Summary
 ```
 
+---
+
 ## Part 2: Local Environment Setup
 
 ### Step 2.1: Install kubectl
@@ -181,7 +243,8 @@ Cloud Manager
 - Sends commands to the cluster's API server
 - Required for all cluster operations
 
-#### Windows Installation (Git Bash)
+<details>
+<summary><b>Windows Installation (Git Bash)</b></summary>
 
 1. **Open Git Bash**
 
@@ -218,8 +281,8 @@ Cloud Manager
    mv kubectl.exe ~/bin/
    ```
 
-7. **Add to Windows PATH:**
-  
+7. **Add to Windows PATH**
+
 8. **Close and reopen Git Bash**
 
 9. **Verify installation:**
@@ -229,8 +292,10 @@ Cloud Manager
    # Expected output:
    # Client Version: v1.34.0
    ```
+</details>
 
-#### macOS Installation
+<details>
+<summary><b>macOS Installation</b></summary>
 
 ```bash
 # Using Homebrew (easiest)
@@ -239,8 +304,10 @@ brew install kubectl
 # Verify
 kubectl version --client
 ```
+</details>
 
-#### Linux Installation (Ubuntu/Debian)
+<details>
+<summary><b>Linux Installation (Ubuntu/Debian)</b></summary>
 
 ```bash
 # Download kubectl
@@ -252,6 +319,7 @@ sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 # Verify
 kubectl version --client
 ```
+</details>
 
 ### Step 2.2: Configure kubectl to Access Your Cluster
 
@@ -319,8 +387,7 @@ kubectl version --client
    # kube-system       Active   20m
    ```
 
-
-### Step 2.4: Install Helm
+### Step 2.3: Install Helm
 
 **What is Helm?**
 - Package manager for Kubernetes (like apt for Ubuntu, brew for macOS)
@@ -328,7 +395,8 @@ kubectl version --client
 - Simplifies deployment and upgrades
 - We'll use it to install MongoDB
 
-#### Windows Installation
+<details>
+<summary><b>Windows Installation</b></summary>
 
 **Option 1: Manual Download (Recommended for Git Bash)**
 
@@ -364,22 +432,27 @@ helm version
 scoop install helm
 helm version
 ```
+</details>
 
-#### macOS Installation
+<details>
+<summary><b>macOS Installation</b></summary>
 
 ```bash
 brew install helm
 helm version
 ```
+</details>
 
-#### Linux Installation
+<details>
+<summary><b>Linux Installation</b></summary>
 
 ```bash
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 helm version
 ```
+</details>
 
-### Step 2.5: Verify Your Setup
+### Step 2.4: Verify Your Setup
 
 Run these commands to confirm everything is working:
 
@@ -406,13 +479,14 @@ kubectl get all --all-namespaces
 
 ## Part 3: Deploy MongoDB ReplicaSet
 
-## Part 3: Deploy MongoDB ReplicaSet
+### Step 3.0: Clone the Repository
 
-### Step 3.0: Clone the repo
-
-```cmd
+```bash
 git clone https://github.com/Ajay263/lke-mongodb-replicaset
+cd lke-mongodb-replicaset
 ```
+
+### Step 3.1: Add Bitnami Helm Repository
 
 **What is Bitnami?**
 - Company providing pre-packaged, production-ready applications
@@ -422,6 +496,7 @@ git clone https://github.com/Ajay263/lke-mongodb-replicaset
 ```bash
 # Add the repository
 helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
 ```
 
 ### Step 3.2: Create MongoDB Configuration File
@@ -470,7 +545,6 @@ helm install mongodb --values helm-mongodb.yaml bitnami/mongodb
 - `mongodb` - Name of your release (you choose this)
 - `--values helm-mongodb.yaml` - Use your custom configuration
 - `bitnami/mongodb` - Chart to install (repository/chartname)
-
 
 ### Step 3.4: Monitor the Deployment
 
@@ -565,7 +639,10 @@ statefulset.apps/mongodb-arbiter   1/1     3m
   - Provides stable network identities
   - Manages persistent storage
 
-### Step 4 : Deploy Mongo Express Web UI
+---
+
+## Part 4: Deploy Mongo Express Web UI
+
 This uses the file named `mongo-express.yaml`
 
 **Configuration Explanation:**
@@ -576,11 +653,13 @@ This uses the file named `mongo-express.yaml`
   - `ME_CONFIG_MONGODB_ADMINPASSWORD`: Securely references password from Kubernetes Secret
 - **Service**: Creates internal endpoint on port 8081
 
+### Step 4.1: Deploy Mongo Express
+
 ```bash
 kubectl apply -f mongo-express.yaml
 ```
 
-### 5. Verify Deployment
+### Step 4.2: Verify Deployment
 
 ```bash
 # Check if Mongo Express is running
@@ -597,22 +676,25 @@ kubectl get svc mongo-express-service
 # mongo-express-service    ClusterIP   10.128.44.229   <none>        8081/TCP   1m
 ```
 
-## Step 6: Install NGINX Ingress Controller
+---
 
-### 1. Add NGINX Ingress Helm Repository
+## Part 5: Install NGINX Ingress Controller
+
+### Step 5.1: Add NGINX Ingress Helm Repository
 
 ```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 ```
 
-### 2. Install NGINX Ingress Controller
+### Step 5.2: Install NGINX Ingress Controller
 
 ```bash
-helm install nginx-ingress ingress-nginx/ingress-nginx --set controller.publishService.enabled=true
+helm install nginx-ingress ingress-nginx/ingress-nginx \
+  --set controller.publishService.enabled=true
 ```
 
-### 3. Wait for LoadBalancer IP
+### Step 5.3: Wait for LoadBalancer IP
 
 ```bash
 # Watch for external IP (takes 2-3 minutes)
@@ -626,7 +708,7 @@ kubectl get service nginx-ingress-ingress-nginx-controller --watch
 # Press Ctrl+C once you see the EXTERNAL-IP
 ```
 
-### 4. Verify All Services
+### Step 5.4: Verify All Services
 
 ```bash
 kubectl get services
@@ -641,22 +723,23 @@ kubectl get services
 # nginx-ingress-ingress-nginx-controller-admission   ClusterIP      10.128.78.109     443/TCP
 ```
 
-## Step 7: Configure Ingress
+---
 
-### 1. Create Ingress Configuration
+## Part 6: Configure Ingress for External Access
+
+### Step 6.1: Create Ingress Configuration
 
 Create a file named `mongo-express-ingress.yaml`:
 
-Replace `170-187-131-161.ip.linodeusercontent.com` with your actual LoadBalancer IP in the format shown:
+Replace `170-187-131-161.ip.linodeusercontent.com` with your actual LoadBalancer IP in the format shown.
 
-
-### 2. Apply Ingress Configuration
+### Step 6.2: Apply Ingress Configuration
 
 ```bash
 kubectl apply -f mongo-express-ingress.yaml
 ```
 
-### 3. Verify Ingress
+### Step 6.3: Verify Ingress
 
 ```bash
 # Check Ingress status
@@ -670,30 +753,35 @@ kubectl get ingress
 kubectl describe ingress mongo-express
 ```
 
-## Step 9: Access Mongo Express
+---
 
-### 1. Open Mongo Express in Browser
+## Part 7: Access and Verify
+
+### Step 7.1: Open Mongo Express in Browser
 
 **Using hostname:**
 ```
 http://170-187-131-161.ip.linodeusercontent.com
 ```
 
+*(Replace with your actual LoadBalancer IP)*
 
-### 2. Explore Your MongoDB Cluster
+### Step 7.2: Explore Your MongoDB Cluster
 
 You should see the Mongo Express dashboard with:
 - Database list
 - Connection information
 - Ability to create/view/edit databases and collections
 
-### 3. Test MongoDB Connection
+### Step 7.3: Test MongoDB Connection
 
 In Mongo Express, you can:
 1. Create a new database (click "Create Database")
 2. Create collections
 3. Insert documents
 4. Run queries
+
+---
 
 ## Troubleshooting
 
@@ -710,40 +798,48 @@ kubectl logs <pod-name>
 kubectl describe pod <pod-name>
 ```
 
-## Clean Up
-
-To delete all resources:
+### Connection Issues
 
 ```bash
-# Delete Ingress
-kubectl delete ingress mongo-express
+# Test MongoDB connectivity from within cluster
+kubectl run -it --rm debug --image=mongo:latest --restart=Never -- \
+  mongosh mongodb://root:secret-root-pwd@mongodb-0.mongodb-headless:27017
 
-# Delete Mongo Express
-kubectl delete -f mongo-express.yaml
-
-# Delete NGINX Ingress Controller
-helm uninstall nginx-ingress
-
-# Delete MongoDB
-helm uninstall mongodb
-
-# Delete Persistent Volume Claims (data will be lost!)
-kubectl delete pvc --all
-
-# Verify all resources are deleted
-kubectl get all
+# Check service endpoints
+kubectl get endpoints
 ```
 
-To delete the entire Linode Kubernetes cluster:
-1. Go to Linode Cloud Manager
-2. Navigate to Kubernetes
-3. Click on your cluster
-4. Click "Delete Cluster"
-5. Confirm deletion
+### Ingress Not Working
 
-**Warning:** This will permanently delete all data and cannot be undone!
+```bash
+# Check Ingress status
+kubectl describe ingress mongo-express
 
-## Best Practices for Production
+# Check NGINX Ingress logs
+kubectl logs -n default -l app.kubernetes.io/name=ingress-nginx
+
+# Verify LoadBalancer service
+kubectl get svc nginx-ingress-ingress-nginx-controller
+```
+
+### Storage Issues
+
+```bash
+# Check Persistent Volume Claims
+kubectl get pvc
+
+# Describe PVC for details
+kubectl describe pvc <pvc-name>
+
+# Check Persistent Volumes
+kubectl get pv
+```
+
+---
+
+## Production Considerations
+
+### Best Practices for Production
 
 1. **Change Default Password**: Never use `secret-root-pwd` in production
 2. **Enable TLS/HTTPS**: Use cert-manager with Let's Encrypt
@@ -756,30 +852,30 @@ To delete the entire Linode Kubernetes cluster:
 9. **Implement RBAC**: Configure proper Role-Based Access Control
 10. **Test Failover**: Regularly test replica set failover scenarios
 
-## Architecture Components
+### Architecture Components
 
-### MongoDB ReplicaSet
+#### MongoDB ReplicaSet
 - **Primary Node**: Accepts all write operations
 - **Secondary Nodes**: Replicate data, can serve reads
 - **Arbiter**: Participates in elections, doesn't store data
 - **Automatic Failover**: If primary fails, a secondary is elected
 
-### Services
+#### Services
 - **Headless Services**: Provide direct DNS to individual pods (mongodb-headless)
 - **ClusterIP Services**: Internal load-balanced endpoints (mongo-express-service)
 - **LoadBalancer Service**: External access with Linode NodeBalancer (nginx-ingress)
 
-### Storage
+#### Storage
 - **Persistent Volumes**: Backed by Linode Block Storage
 - **Stateful Deployment**: Data survives pod restarts
 - **Per-Pod Storage**: Each MongoDB pod has its own persistent volume
 
-### Ingress
+#### Ingress
 - **NGINX Controller**: Routes HTTP/HTTPS traffic
 - **Host-based Routing**: Direct traffic based on hostname
 - **Path-based Routing**: Route to different services based on URL path
 
-## Security Considerations
+### Security Considerations
 
 ⚠️ **Important Security Notes:**
 
@@ -804,6 +900,45 @@ To delete the entire Linode Kubernetes cluster:
    kubectl apply -f network-policy.yaml
    ```
 
+---
+
+## Clean Up
+
+### Remove Application Components
+
+```bash
+# Delete Ingress
+kubectl delete ingress mongo-express
+
+# Delete Mongo Express
+kubectl delete -f mongo-express.yaml
+
+# Delete NGINX Ingress Controller
+helm uninstall nginx-ingress
+
+# Delete MongoDB
+helm uninstall mongodb
+
+# Delete Persistent Volume Claims (data will be lost!)
+kubectl delete pvc --all
+
+# Verify all resources are deleted
+kubectl get all
+```
+
+### Delete Kubernetes Cluster
+
+To delete the entire Linode Kubernetes cluster:
+1. Go to Linode Cloud Manager
+2. Navigate to Kubernetes
+3. Click on your cluster
+4. Click "Delete Cluster"
+5. Confirm deletion
+
+**Warning:** This will permanently delete all data and cannot be undone!
+
+---
+
 ## Learning Resources
 
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
@@ -812,12 +947,36 @@ To delete the entire Linode Kubernetes cluster:
 - [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
 - [Linode Kubernetes Engine](https://www.linode.com/products/kubernetes/)
 
+---
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Guidelines
+
+- Follow Kubernetes best practices
+- Test changes in a development cluster
+- Update documentation for new features
+- Add troubleshooting steps for common issues
+
+---
+
 ## Support
 
 For issues or questions:
-- Linode Support: https://www.linode.com/support/
-- Kubernetes Community: https://kubernetes.io/community/
-- MongoDB Community: https://community.mongodb.com/
+- **Linode Support**: https://www.linode.com/support/
+- **Kubernetes Community**: https://kubernetes.io/community/
+- **MongoDB Community**: https://community.mongodb.com/
+- **GitHub Issues**: [Report an issue](https://github.com/Ajay263/lke-mongodb-replicaset/issues)
+
+---
 
 ## License
 
@@ -825,10 +984,12 @@ This guide is provided as-is for educational purposes.
 
 ---
 
+<div align="center">
+
+**⭐ If you find this project helpful, please consider giving it a star!**
+
 **Built with ❤️ by someone learning Kubernetes hands-on!**
 
 *Last Updated: November 2025*
 
-
-
-###
+</div>
