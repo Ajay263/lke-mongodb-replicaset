@@ -837,20 +837,6 @@ kubectl get pv
 
 ---
 
-## Production Considerations
-
-### Best Practices for Production
-
-1. **Change Default Password**: Never use `secret-root-pwd` in production
-2. **Enable TLS/HTTPS**: Use cert-manager with Let's Encrypt
-3. **Add Authentication**: Configure basic auth for Mongo Express
-4. **Set Resource Limits**: Define CPU/memory limits for all containers
-5. **Enable Monitoring**: Install Prometheus and Grafana
-6. **Configure Backups**: Set up automated MongoDB backups
-7. **Use NetworkPolicies**: Restrict pod-to-pod communication
-8. **Update Images**: Use specific version tags, not `latest`
-9. **Implement RBAC**: Configure proper Role-Based Access Control
-10. **Test Failover**: Regularly test replica set failover scenarios
 
 ### Architecture Components
 
