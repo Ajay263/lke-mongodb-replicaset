@@ -15,6 +15,8 @@
 
 ## Architecture Overview
 
+![Architetcture](img/k8_architecture.png)
+
 
 **What will be  Deployed?:**
 - 3-node MongoDB ReplicaSet with automatic failover
